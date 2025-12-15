@@ -2,40 +2,36 @@
 
 import { ReactNode } from 'react'
 import { Sidebar } from './sidebar'
-import { AuthService } from '@/lib/auth'
-import type { AuthUser } from '@/lib/auth'
+
+type BasicUser = {
+  name: string
+  email: string
+  role: string
+}
 
 interface MainLayoutProps {
   children: ReactNode
   currentPath: string
   onNavigate: (path: string) => void
+  user?: BasicUser
 }
 
-export function MainLayout({ children, currentPath, onNavigate }: MainLayoutProps) {
-  const user = AuthService.getCurrentUser()
-  
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">RimMed</h1>
-          <p className="text-gray-600">Please sign in to continue</p>
-        </div>
-      </div>
-    )
-  }
+const FALLBACK_USER: BasicUser = {
+  name: 'RimMed Admin',
+  email: 'admin@rimmed.local',
+  role: 'ADMIN',
+}
 
+export function MainLayout({ children, currentPath, onNavigate, user }: MainLayoutProps) {
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      <Sidebar 
-        user={user} 
-        currentPath={currentPath} 
-        onNavigate={onNavigate} 
+      <Sidebar
+        user={user ?? FALLBACK_USER}
+        currentPath={currentPath}
+        onNavigate={onNavigate}
       />
       <main className="flex-1 overflow-auto">
-        <div className="p-6">
-          {children}
-        </div>
+        <div className="p-6">{children}</div>
       </main>
     </div>
   )
