@@ -1,0 +1,214 @@
+// RimMed - Patient Turn & Queue Management System for Moroccan Clinics
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Multi-tenant clinic management
+model Clinic {
+  id          String   @id @default(cuid())
+  name        String
+  address     String?
+  phone       String?
+  email       String?
+  timezone    String   @default("Africa/Casablanca")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  profiles    Profile[]
+  patients    Patient[]
+  turns       Turn[]
+  notificationEvents NotificationEvent[]
+
+  @@index([id])
+  @@index([isActive])
+}
+
+// User profiles linked to auth system
+model Profile {
+  id           String   @id @default(cuid())
+  authUserId   String   @unique // Link to external auth system
+  clinicId     String
+  email        String
+  name         String
+  phone        String?
+  role         UserRole @default(RECEPTIONIST)
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  clinic       Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  createdTurns Turn[]   @relation("TurnCreator")
+  updatedTurns Turn[]   @relation("TurnUpdater")
+
+  @@index([clinicId])
+  @@index([authUserId])
+  @@index([role])
+  @@index([isActive])
+}
+
+// Patient records - primarily identified by phone
+model Patient {
+  id          String   @id @default(cuid())
+  clinicId    String
+  phoneNumber String   // Primary identifier
+  name        String
+  email       String?
+  dateOfBirth DateTime?
+  gender      Gender?
+  address     String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  turns       Turn[]
+
+  @@unique([clinicId, phoneNumber])
+  @@index([clinicId])
+  @@index([phoneNumber])
+  @@index([isActive])
+}
+
+// Core Turn Engine - the queue/turn record
+model Turn {
+  id              String      @id @default(cuid())
+  clinicId        String
+  patientId       String
+  turnDate        DateTime    @default(now())
+  queuePosition   Int         // Position in queue for the day
+  status          TurnStatus  @default(SCHEDULED)
+  isUrgent        Boolean     @default(false)
+  scheduledTime   DateTime?   // Optional scheduled time
+  checkedInAt     DateTime?   // When patient physically arrived
+  calledAt        DateTime?   // When patient was called
+  consultationStartAt DateTime?
+  consultationEndAt   DateTime?
+  completedAt     DateTime?   // When marked done
+  serviceType     String?     // For future invoicing
+  serviceNotes    String?     // Doctor notes
+  servicePrice    Float?       // For future invoicing (SQLite compatible)
+  invoiceId       String?     // Link to future invoicing system
+  createdBy       String      // Profile ID
+  updatedBy       String?     // Profile ID
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  clinic          Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient         Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  creator         Profile     @relation("TurnCreator", fields: [createdBy], references: [id])
+  updater         Profile?    @relation("TurnUpdater", fields: [updatedBy], references: [id])
+  notificationEvents NotificationEvent[]
+
+  @@index([clinicId, turnDate])
+  @@index([clinicId, status])
+  @@index([clinicId, queuePosition])
+  @@index([patientId])
+  @@index([isUrgent])
+  @@index([createdBy])
+}
+
+// Notification events for future WhatsApp/SMS integration
+model NotificationEvent {
+  id          String              @id @default(cuid())
+  clinicId    String
+  turnId      String
+  eventType   NotificationEventType
+  channel     NotificationChannel
+  recipient   String              // Phone number or email
+  payload     Json?               // Message content and metadata
+  status      NotificationStatus  @default(PENDING)
+  sentAt      DateTime?
+  error       String?
+  retryCount  Int                 @default(0)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  // Relations
+  clinic      Clinic              @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  turn        Turn                @relation(fields: [turnId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId, status])
+  @@index([turnId])
+  @@index([eventType])
+  @@index([channel])
+}
+
+// Audit log for tracking changes (optional but recommended)
+model AuditLog {
+  id        String   @id @default(cuid())
+  clinicId  String
+  userId    String   // Profile ID
+  action    String   // CREATE, UPDATE, DELETE
+  entity    String   // TURN, PATIENT, etc.
+  entityId  String   // ID of the affected entity
+  oldValues Json?    // Previous state
+  newValues Json?    // New state
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([clinicId])
+  @@index([userId])
+  @@index([entity])
+  @@index([createdAt])
+}
+
+// Enums
+enum UserRole {
+  ADMIN
+  DOCTOR
+  RECEPTIONIST
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum TurnStatus {
+  SCHEDULED      // Registered but not arrived
+  WAITING        // Checked in and in waiting room
+  NEXT           // Flagged to be called
+  IN_CONSULTATION // Currently with doctor
+  DONE           // Consultation completed
+  CANCELLED      // Cancelled or no-show
+  SKIPPED        // Temporarily skipped
+}
+
+enum NotificationEventType {
+  TURN_REGISTERED
+  TURN_CHECKED_IN
+  TURN_NEXT
+  TURN_IN_CONSULTATION
+  TURN_DONE
+  TURN_CANCELLED
+  TURN_DELAYED
+}
+
+enum NotificationChannel {
+  WHATSAPP
+  SMS
+  EMAIL
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  RETRYING
+}
