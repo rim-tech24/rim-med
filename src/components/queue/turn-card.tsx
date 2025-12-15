@@ -1,22 +1,20 @@
 'use client'
 
-import { useState } from 'react'
 import { format } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { 
-  UserPlus, 
-  Phone, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
+import {
+  UserPlus,
+  Phone,
+  Clock,
+  CheckCircle,
+  XCircle,
   SkipForward,
   User,
   AlertTriangle,
   Play,
-  Square
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { TurnWithPatient } from '@/lib/types'
@@ -44,10 +42,16 @@ export function TurnCard({
   onCancel,
   onSkip,
   onReturnToWaiting,
-  isLoading = false
+  isLoading = false,
 }: TurnCardProps) {
-  const getStatusColor = (status: string) => {
-    switch (status) {
+  // Normalizamos status (por si viene "waiting", "Waiting", etc.)
+  const statusRaw = (turn as any)?.status ?? ''
+  const status = String(statusRaw).toUpperCase().trim()
+
+  const statusLabel = status ? status.split('_').join(' ') : 'UNKNOWN'
+
+  const getStatusColor = (s: string) => {
+    switch (s) {
       case 'SCHEDULED':
         return 'bg-gray-100 text-gray-800'
       case 'WAITING':
@@ -67,8 +71,8 @@ export function TurnCard({
     }
   }
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
+  const getStatusIcon = (s: string) => {
+    switch (s) {
       case 'WAITING':
         return <Clock className="h-3 w-3" />
       case 'NEXT':
@@ -86,127 +90,141 @@ export function TurnCard({
     }
   }
 
+  const formatWaitTime = () => {
+    const checkedInAt = (turn as any)?.checkedInAt
+    if (!checkedInAt) return null
+
+    const now = new Date()
+    const checkedIn = new Date(checkedInAt)
+    const diffMs = now.getTime() - checkedIn.getTime()
+    const diffMins = Math.max(0, Math.floor(diffMs / 60000))
+    return `${diffMins}m`
+  }
+
+  const initials = (() => {
+    const name = turn?.patient?.name || 'Patient'
+    return name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((n) => n[0]?.toUpperCase() ?? '')
+      .join('')
+  })()
+
   const getActionButtons = () => {
-    switch (turn.status) {
+    switch (status) {
       case 'SCHEDULED':
         return (
-          <Button 
-            onClick={onCheckIn} 
-            disabled={isLoading}
-            className="w-full"
-          >
-            <UserPlus className="h-4 w-4 mr-2" />
-            Check In
-          </Button>
-        )
-      
-      case 'WAITING':
-        return (
-          <Button 
-            onClick={onCall} 
-            disabled={isLoading}
-            className="w-full"
-            variant={isNext ? "default" : "outline"}
-          >
-            <Play className="h-4 w-4 mr-2" />
-            {isNext ? 'Call Now' : 'Call Next'}
-          </Button>
-        )
-      
-      case 'NEXT':
-        return (
           <div className="space-y-2">
-            <Button 
-              onClick={onStartConsultation} 
-              disabled={isLoading}
-              className="w-full"
-            >
-              <User className="h-4 w-4 mr-2" />
-              Start Consultation
+            <Button onClick={onCheckIn} disabled={isLoading} className="w-full">
+              <UserPlus className="h-4 w-4 mr-2" />
+              Check In
             </Button>
-            <Button 
-              onClick={onSkip} 
-              disabled={isLoading}
-              variant="outline"
-              className="w-full"
-            >
-              <SkipForward className="h-4 w-4 mr-2" />
-              Skip
-            </Button>
-          </div>
-        )
-      
-      case 'IN_CONSULTATION':
-        return (
-          <Button 
-            onClick={onMarkDone} 
-            disabled={isLoading}
-            className="w-full"
-          >
-            <CheckCircle className="h-4 w-4 mr-2" />
-            Mark Done
-          </Button>
-        )
-      
-      case 'SKIPPED':
-        return (
-          <div className="space-y-2">
-            <Button 
-              onClick={onReturnToWaiting} 
-              disabled={isLoading}
-              variant="outline"
-              className="w-full"
-            >
-              <Clock className="h-4 w-4 mr-2" />
-              Return to Waiting
-            </Button>
-            <Button 
-              onClick={onCancel} 
-              disabled={isLoading}
-              variant="destructive"
-              className="w-full"
-            >
+            <Button onClick={onCancel} disabled={isLoading} variant="destructive" className="w-full">
               <XCircle className="h-4 w-4 mr-2" />
               Cancel
             </Button>
           </div>
         )
-      
+
+      case 'WAITING':
+        return (
+          <div className="space-y-2">
+            <Button
+              onClick={onCall}
+              disabled={isLoading}
+              className="w-full"
+              variant={isNext ? 'default' : 'outline'}
+            >
+              <Play className="h-4 w-4 mr-2" />
+              {isNext ? 'Call Now' : 'Call'}
+            </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={onSkip} disabled={isLoading} variant="outline">
+                <SkipForward className="h-4 w-4 mr-2" />
+                Skip
+              </Button>
+              <Button onClick={onCancel} disabled={isLoading} variant="destructive">
+                <XCircle className="h-4 w-4 mr-2" />
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )
+
+      case 'NEXT':
+        return (
+          <div className="space-y-2">
+            <Button onClick={onStartConsultation} disabled={isLoading} className="w-full">
+              <User className="h-4 w-4 mr-2" />
+              Start Consultation
+            </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={onSkip} disabled={isLoading} variant="outline">
+                <SkipForward className="h-4 w-4 mr-2" />
+                Skip
+              </Button>
+              <Button onClick={onCancel} disabled={isLoading} variant="destructive">
+                <XCircle className="h-4 w-4 mr-2" />
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )
+
+      case 'IN_CONSULTATION':
+        return (
+          <div className="space-y-2">
+            <Button onClick={onMarkDone} disabled={isLoading} className="w-full">
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Mark Done
+            </Button>
+            <Button onClick={onCancel} disabled={isLoading} variant="destructive" className="w-full">
+              <XCircle className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+          </div>
+        )
+
+      case 'SKIPPED':
+        return (
+          <div className="space-y-2">
+            <Button onClick={onReturnToWaiting} disabled={isLoading} variant="outline" className="w-full">
+              <Clock className="h-4 w-4 mr-2" />
+              Return to Waiting
+            </Button>
+            <Button onClick={onCancel} disabled={isLoading} variant="destructive" className="w-full">
+              <XCircle className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+          </div>
+        )
+
+      // DONE / CANCELLED => no actions
       default:
         return null
     }
   }
 
-  const formatWaitTime = () => {
-    if (turn.checkedInAt) {
-      const now = new Date()
-      const checkedIn = new Date(turn.checkedInAt)
-      const diffMs = now.getTime() - checkedIn.getTime()
-      const diffMins = Math.floor(diffMs / 60000)
-      return `${diffMins}m`
-    }
-    return null
-  }
-
   return (
-    <Card className={cn(
-      'transition-all duration-200',
-      isNext && 'ring-2 ring-blue-500 shadow-lg',
-      turn.status === 'DONE' && 'opacity-60'
-    )}>
+    <Card
+      className={cn(
+        'transition-all duration-200',
+        isNext && 'ring-2 ring-blue-500 shadow-lg',
+        status === 'DONE' && 'opacity-60'
+      )}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Avatar className="h-10 w-10">
-              <AvatarFallback>
-                {turn.patient.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-              </AvatarFallback>
+              <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
             <div>
-              <CardTitle className="text-lg">{turn.patient.name}</CardTitle>
+              <CardTitle className="text-lg">{turn?.patient?.name ?? 'Patient'}</CardTitle>
               <div className="flex items-center space-x-2 text-sm text-gray-600">
                 <Phone className="h-3 w-3" />
-                <span>{turn.patient.phoneNumber}</span>
+                <span>{turn?.patient?.phoneNumber ?? '-'}</span>
                 {formatWaitTime() && (
                   <>
                     <span>•</span>
@@ -216,14 +234,16 @@ export function TurnCard({
               </div>
             </div>
           </div>
+
           <div className="flex flex-col items-end space-y-1">
-            <Badge className={getStatusColor(turn.status)}>
+            <Badge className={getStatusColor(status)}>
               <div className="flex items-center space-x-1">
-                {getStatusIcon(turn.status)}
-                <span>{turn.status.replace('_', ' ')}</span>
+                {getStatusIcon(status)}
+                <span>{statusLabel}</span>
               </div>
             </Badge>
-            {turn.isUrgent && (
+
+            {!!turn?.isUrgent && (
               <Badge variant="destructive" className="text-xs">
                 <AlertTriangle className="h-3 w-3 mr-1" />
                 Urgent
@@ -232,27 +252,27 @@ export function TurnCard({
           </div>
         </div>
       </CardHeader>
-      
+
       <CardContent className="pt-0">
         <div className="space-y-3">
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-600">Queue Position</span>
-            <span className="font-medium">#{turn.queuePosition}</span>
+            <span className="font-medium">#{(turn as any)?.queuePosition ?? '-'}</span>
           </div>
-          
-          {turn.scheduledTime && (
+
+          {(turn as any)?.scheduledTime && (
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600">Scheduled</span>
               <span className="font-medium">
-                {format(new Date(turn.scheduledTime), 'HH:mm')}
+                {format(new Date((turn as any).scheduledTime), 'HH:mm')}
               </span>
             </div>
           )}
 
-          {turn.serviceType && (
+          {(turn as any)?.serviceType && (
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600">Service</span>
-              <span className="font-medium">{turn.serviceType}</span>
+              <span className="font-medium">{(turn as any).serviceType}</span>
             </div>
           )}
 
